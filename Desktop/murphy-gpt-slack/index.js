@@ -21,10 +21,16 @@ const app = new App({
 // Init OpenAI
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// 🔽 I will replace EVERYTHING inside backticks below with your SOPs
 const SYSTEM = `You are MurphyGPT for The Murphy Group.
-Enforce: speed-to-lead <= 5 minutes; 7 attempts in 7 days; monthly past-client touches.
-Be concise, action-oriented. End with "The Murphy Group | mgsells.com".`;
 
+Use ONLY the SOPs below unless the user asks for general info. Keep answers short, step-by-step, and action-oriented. If info is missing, say what’s missing and ask for it. End every answer with: "The Murphy Group | mgsells.com".
+
+SOPs:
+[PASTE FROM ME HERE — I’ll generate this once you send your SOP text]
+`;
+
+// Ask OpenAI
 async function askOpenAI(text) {
   try {
     const resp = await openai.responses.create({
@@ -43,8 +49,7 @@ async function askOpenAI(text) {
 
 // @mentions in channels
 app.event("app_mention", async ({ event, say }) => {
-  console.log("ℹ️ app_mention:", event.text);
-  const q = (event.text || "").replace(/<@\\w+>/g, "").trim();
+  const q = (event.text || "").replace(/<@\w+>/g, "").trim();
   const a = await askOpenAI(q);
   await say({ thread_ts: event.ts, text: a });
 });
@@ -52,7 +57,6 @@ app.event("app_mention", async ({ event, say }) => {
 // Direct messages
 app.message(async ({ message, say }) => {
   if (message?.channel_type === "im" && !message.bot_id) {
-    console.log("ℹ️ DM:", message.text);
     const a = await askOpenAI(message.text);
     await say(a);
   }
@@ -67,3 +71,4 @@ app.message(async ({ message, say }) => {
     process.exit(1);
   }
 })();
+
