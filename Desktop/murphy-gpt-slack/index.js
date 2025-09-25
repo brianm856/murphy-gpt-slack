@@ -382,13 +382,32 @@ app.message(async ({ message, say }) => {
 
     // Admin refresh commands
     if (/^refresh\s+sops?$/i.test(text)) {
-      await refreshSOPCache?.();
-      await say(`SOPs refreshed from Google Drive ✅`);
+      if (typeof refreshSOPCache === 'function') {
+        await refreshSOPCache();
+      } else if (typeof refreshSOPs === 'function') {
+        await refreshSOPs();
+      } else if (typeof loadSOPsFromDrive === 'function') {
+        await loadSOPsFromDrive();
+      } else if (typeof refreshSOPDrive === 'function') {
+        await refreshSOPDrive();
+      } else {
+        console.warn('No SOP refresh function found in index.js');
+      }
+      await say('SOPs refreshed from Google Drive ✅');
       return;
     }
+
     if (/^refresh\s+faq$/i.test(text)) {
-      await refreshFaqCache?.();
-      await say(`FAQ refreshed from Google Sheets ✅`);
+      if (typeof refreshFaqCache === 'function') {
+        await refreshFaqCache();
+      } else if (typeof refreshFAQ === 'function') {
+        await refreshFAQ();
+      } else if (typeof loadFAQFromSheet === 'function') {
+        await loadFAQFromSheet();
+      } else {
+        console.warn('No FAQ refresh function found in index.js');
+      }
+      await say('FAQ refreshed from Google Sheets ✅');
       return;
     }
 
