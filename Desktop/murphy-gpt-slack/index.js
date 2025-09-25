@@ -61,6 +61,96 @@ You are MurphyGPT for The Murphy Group real estate team.
 }
 
 // =========================
+// 2b) Hybrid doc-grounded answer (LLM presenter, SOP/FAQ brain)
+// =========================
+function tokenize(s) { return (s || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
+
+function scoreItem(q, item) {
+  const qTokens = new Set(tokenize(q));
+  const fields = [
+    { text: item.title,   w: 4 },
+    { text: item.summary, w: 3 },
+    { text: item.content, w: 1 },
+  ];
+  let score = 0;
+  for (const { text, w } of fields) {
+    const toks = tokenize(text);
+    for (const t of toks) if (qTokens.has(t)) score += w;
+  }
+  if ((item.title || '').toLowerCase().includes(q.toLowerCase())) score += 6;   // verbatim boost
+  if ((item.content || '').toLowerCase().includes(q.toLowerCase())) score += 2;
+  return score;
+}
+
+function bestMatchFrom(arr, q) {
+  if (!Array.isArray(arr) || !arr.length) return null;
+  let best = null;
+  for (const it of arr) {
+    const s = scoreItem(q, it);
+    if (!best || s > best.score) best = { item: it, score: s };
+  }
+  return best;
+}
+
+async function docGroundedAnswer({ text, force }) {
+  const q = (text || '').trim();
+  if (!q) return "What would you like to know?";
+
+  const wantSOP = !force || force === 'sop';
+  const wantFAQ = !force || force === 'faq';
+
+  let cand = null;
+  if (wantSOP && typeof SOP_CACHE !== 'undefined' && SOP_CACHE.length) {
+    const b = bestMatchFrom(SOP_CACHE, q);
+    if (b && b.score >= 6) cand = { type: 'sop', ...b };
+  }
+  if (!cand && wantFAQ && typeof FAQ_CACHE !== 'undefined' && FAQ_CACHE.length) {
+    const b = bestMatchFrom(FAQ_CACHE, q);
+    if (b && b.score >= 6) cand = { type: 'faq', ...b };
+  }
+
+  if (cand) {
+    const doc = cand.item;
+    const link = doc.url && doc.url !== '#' ? doc.url : '';
+    const label = cand.type === 'sop' ? 'SOP' : 'FAQ';
+
+    // Ask the LLM to present a short, grounded answer (no drift)
+    const system = `
+You are MurphyGPT. Give a SHORT, conversational answer grounded ONLY in the provided document.
+- If the question is directly answered in the doc, answer in 1–2 sentences.
+- Begin with "Per the ${label}: ${doc.title}, ..." when it fits naturally.
+- Include specific numbers/steps if present (deadlines, fees, forms).
+- Then add a new line: "Link: ${link || 'N/A'}".
+- Do not invent facts or links. If not in the doc, don't claim it.
+`.trim();
+
+    const user = `Question: ${q}\n\nDocument Title: ${doc.title}\nSummary: ${doc.summary || ''}\nContent:\n${(doc.content || '').slice(0, 7000)}`;
+
+    try {
+      const resp = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        temperature: 0.2,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+      });
+      const content = resp.choices?.[0]?.message?.content?.trim();
+      if (content) return content;
+    } catch (e) {
+      console.error('docGroundedAnswer LLM error:', e?.response?.data || e);
+    }
+
+    // Plain fallback if the LLM call fails
+    return `Per the ${label}: *${doc.title}* — ${doc.summary || 'see details in the document.'}${link ? `\nLink: ${link}` : ''}`;
+  }
+
+  // No doc match → pure LLM fallback
+  return await llmAnswer({ text: q });
+}
+
+
+// =========================
 /** 3) Google OAuth helper (env-first, file fallback) */
 // =========================
 async function getOAuth() {
@@ -285,6 +375,39 @@ function formatFaqAnswer(item) {
 /** 7) Slack message handler */
 // =========================
 app.message(async ({ message, say }) => {
+  // === HYBRID HANDLER (short-circuit) ===
+  try {
+    const text = (message.text || '').trim();
+    if (!text) return;
+
+    // Admin refresh commands
+    if (/^refresh\s+sops?$/i.test(text)) {
+      await refreshSOPCache?.();
+      await say(`SOPs refreshed from Google Drive ✅`);
+      return;
+    }
+    if (/^refresh\s+faq$/i.test(text)) {
+      await refreshFaqCache?.();
+      await say(`FAQ refreshed from Google Sheets ✅`);
+      return;
+    }
+
+    // Forced modes: "sop: ..." or "faq: ..."
+    let force;
+    let q = text;
+    const m = text.match(/^\s*(sop|faq)\s*:\s*(.+)$/i);
+    if (m) { force = m[1].toLowerCase(); q = m[2]; }
+
+    const answer = await docGroundedAnswer({ text: q, force });
+    await say(answer);
+    return; // prevent old code below from running
+  } catch (err) {
+    console.error('hybrid handler error:', err);
+    await say("Sorry, I hit an error trying to answer that.");
+    return;
+  }
+  // === END HYBRID HANDLER ===
+
   try {
     const text = (message.text || '').trim();
     if (!text) return;
