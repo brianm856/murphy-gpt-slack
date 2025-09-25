@@ -59,6 +59,44 @@ You are MurphyGPT for The Murphy Group real estate team.
     return "I'm having trouble reaching the assistant right now.";
   }
 }
+// ===== Brand/topic override for SOP picking (e.g., "homelight" beats "ylopo")
+function pickSOPOverride(userText = '', sops = []) {
+  const t = String(userText || '').toLowerCase();
+
+  // Build brand/topic preferences & avoids
+  const prefer = [];
+  const avoid = [];
+
+  // HomeLight
+  if (/\bhomelight\b|\bhome\s*light\b/.test(t)) {
+    prefer.push(/homelight/i);
+    avoid.push(/ylopo/i);
+  }
+
+  // Ylopo (AI Voice)
+  if (/\bylopo\b/.test(t) || /\bai\s*voice\b/.test(t)) {
+    prefer.push(/ylopo/i);
+  }
+
+  // Zillow Flex
+  if (/\bzillow\b/.test(t) || /\bflex\b/.test(t)) {
+    prefer.push(/zillow/i);
+  }
+
+  if (!prefer.length && !avoid.length) return null;
+
+  // Try a direct title/tag match for preferred brands first
+  const hit = sops.find(d =>
+    prefer.some(rx => rx.test(d.title || '') || rx.test((d.tags || []).join(' ')))
+  );
+  if (hit) return hit;
+
+  // If we had avoids, prefer anything that doesn't match avoid (optional)
+  const nonAvoid = sops.filter(d =>
+    !avoid.some(rx => rx.test(d.title || '') || rx.test((d.tags || []).join(' ')))
+  );
+  return nonAvoid.length ? nonAvoid[0] : null; // else give up and let normal picker run
+}
 
 // =========================
 // 2b) Hybrid doc-grounded answer (LLM presenter, SOP/FAQ brain)
@@ -101,7 +139,15 @@ async function docGroundedAnswer({ text, force }) {
 
   let cand = null;
   if (wantSOP && typeof SOP_CACHE !== 'undefined' && SOP_CACHE.length) {
-    const b = bestMatchFrom(SOP_CACHE, q);
+  let b = bestMatchFrom(SOP_CACHE, q);
+
+  // BRAND OVERRIDE: if user mentions HomeLight/Ylopo/Zillow, prefer that SOP
+  const o = pickSOPOverride(q, SOP_CACHE);
+  if (o) b = o;
+
+  // ... (leave the rest of this block exactly as it was)
+}
+
     if (b && b.score >= 6) cand = { type: 'sop', ...b };
   }
   if (!cand && wantFAQ && typeof FAQ_CACHE !== 'undefined' && FAQ_CACHE.length) {
@@ -263,6 +309,44 @@ let SOP_CACHE = [];
 let SOP_CACHE_AT = 0;
 
 function getSOPs() { return SOP_CACHE; }
+// ===== Brand/topic override for SOP picking (HomeLight/Ylopo/Zillow Flex)
+function pickSOPOverride(userText = '', sops = []) {
+  const t = String(userText || '').toLowerCase();
+
+  const prefer = [];
+  const avoid = [];
+
+  // HomeLight (match "homelight" or "home light")
+  if (/\bhomelight\b|\bhome\s*light\b/.test(t)) {
+    prefer.push(/homelight/i);
+    avoid.push(/ylopo/i);
+  }
+
+  // Ylopo / AI Voice
+  if (/\bylopo\b/.test(t) || /\bai\s*voice\b/.test(t)) {
+    prefer.push(/ylopo/i);
+  }
+
+  // Zillow / Flex
+  if (/\bzillow\b/.test(t) || /\bflex\b/.test(t) || /\bzillow\s*flex\b/.test(t)) {
+    prefer.push(/zillow|flex/i);
+  }
+
+  if (!prefer.length && !avoid.length) return null;
+
+  // Direct preferred match on title or tags
+  const hit = sops.find(d =>
+    prefer.some(rx => rx.test(d.title || '') || rx.test((d.tags || []).join(' ')))
+  );
+  if (hit) return hit;
+
+  // If we’re avoiding something, pick a non-avoided SOP if possible
+  const nonAvoid = sops.filter(d =>
+    !avoid.some(rx => rx.test(d.title || '') || rx.test((d.tags || []).join(' ')))
+  );
+  return nonAvoid.length ? nonAvoid[0] : null;
+}
+
 
 function docText(el) {
   if (!el) return '';
