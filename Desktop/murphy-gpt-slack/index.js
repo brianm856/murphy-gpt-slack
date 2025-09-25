@@ -379,6 +379,23 @@ app.message(async ({ message, say }) => {
   try {
     const text = (message.text || '').trim();
     if (!text) return;
+// --- Chit-chat & trivial message guard ---
+const ACK_RE = /^(?:thanks|thank you|thx|ty|👍|👌|🙏|great|got it|sounds good|perfect|awesome|nice|cool|ok|okay|k|yup|yep|roger|copy|understood|done|appreciate it)\b[.!]?\s*$/i;
+const tokens = text.split(/\s+/).filter(Boolean);
+const looksLikeQuestion =
+  /(\?|^\s*(how|what|when|where|why|which|who|can|should|do|does|did|is|are|list|steps|process|policy|sop|guide|checklist)\b)/i.test(text);
+
+// If it's a quick acknowledgement, reply lightly and stop here
+if (ACK_RE.test(text)) {
+  await say("Anytime! 🙌");
+  return;
+}
+
+// If it's very short and not question-like, don't run SOP/FAQ search
+if (tokens.length < 3 && !looksLikeQuestion && !/^sop:|^faq:/i.test(text)) {
+  await say("I’m here when you need me—ask a question or say `sop: <topic>` anytime.");
+  return;
+}
 
     // Admin refresh commands
     if (/^refresh\s+sops?$/i.test(text)) {
