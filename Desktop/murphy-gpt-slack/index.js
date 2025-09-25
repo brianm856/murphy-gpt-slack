@@ -191,6 +191,12 @@ function parseTypePrefix(text) {
   const m = (text || '').match(/^\s*(buyer|seller|investor|agent|general):\s*(.*)$/i);
   return m ? { type: m[1].toLowerCase(), query: m[2] } : { type: null, query: text };
 }
+function getControlPrefix(raw) {
+  const m = (raw || '').match(/^\s*(sop|faq):\s*(.*)$/i);
+  if (m) return { mode: m[1].toLowerCase(), text: m[2] };
+  return { mode: null, text: raw };
+}
+
 function formatFaqBlocks(hits, query) {
   const blocks = [];
   if (query) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `Query: *${query}*` }] });
@@ -223,6 +229,38 @@ formatSopBlocks(hits, query) {
     );
   }
 
+function getControlPrefix(raw) {
+  const m = (raw || '').match(/^\s*(sop|faq):\s*(.*)$/i);
+  if (m) return { mode: m[1].toLowerCase(), text: m[2] };
+  return { mode: null, text: raw };
+}
+
+function sopAliasHits(q) {
+  const text = (q || '').toLowerCase();
+  const rules = [
+    { key: 'listing to close',  match: s => s.title?.toLowerCase().includes('listing to close') },
+    { key: 'open house',        match: s => s.title?.toLowerCase().includes('open house') },
+    { key: 'circle calling',    match: s => s.title?.toLowerCase().includes('circle call') },
+    { key: 'homelight',         match: s => s.title?.toLowerCase().includes('homelight') },
+    { key: 'referral',          match: s => s.title?.toLowerCase().includes('referral') },
+    { key: 'zillow flex',       match: s => s.title?.toLowerCase().includes('zillow flex') },
+    { key: 'buyer pending',     match: s => s.title?.toLowerCase().includes('buyer pending') },
+    { key: 'onboarding az',     match: s => s.title?.toLowerCase().includes('exp az') || s.title?.toLowerCase().includes('arizona') },
+    { key: 'onboarding nj',     match: s => s.title?.toLowerCase().includes('exp nj') || s.title?.toLowerCase().includes('new jersey') },
+    { key: '30/60/90',          match: s => s.title?.toLowerCase().includes('30/60/90') || s.title?.toLowerCase().includes('agent success plan') },
+  ];
+  const hits = [];
+  for (const r of rules) {
+    if (text.includes(r.key)) hits.push(...SOPS.filter(r.match));
+  }
+  if (!hits.length && /listing\s*to\s*close/.test(text)) {
+    hits.push(...SOPS.filter(s => (s.title||'').toLowerCase().includes('listing to close')));
+  }
+  const seen = new Set();
+  return hits.filter(s => !seen.has((seen.add(s.title), s.title)));
+}
+
+
 function shouldPreferSOP(raw) {
   const q = (raw || '').toLowerCase();
   if (/^\s*sop:\s*/i.test(q)) return true;   // manual override via "sop: ..."
@@ -254,7 +292,7 @@ async function handleQueryFlow({ rawText, client, channel, thread_ts, say }) {
   const raw = (rawText || '').trim();
   if (!raw) return;
 
-  // maintenance commands
+  // maintenance
   if (/^(refresh|sync)\s+faq$/i.test(raw)) {
     await refreshFaqCache();
     const payload = { text: 'FAQ cache refreshed ✅' };
@@ -268,22 +306,30 @@ async function handleQueryFlow({ rawText, client, channel, thread_ts, say }) {
     return;
   }
 
-  const preferSOP = (typeof shouldPreferSOP === 'function') && shouldPreferSOP(raw);
+  // control prefixes: "sop: ..." or "faq: ..."
+  const { mode, text } = getControlPrefix(raw);
+  const qText = text;
+  const sopFirst = mode !== 'faq'; // default SOP-first unless user forces FAQ
 
-
-  // If it looks like an SOP query, try SOPs first
-  if (preferSOP) {
-    const sHitsFirst = searchSOPs(raw, 3);
-    if (sHitsFirst.length) {
-      const payload = { text: `Top SOPs for: ${raw}`, blocks: formatSopBlocks(sHitsFirst, raw) };
+  // 1) SOP-first (try aliases, then fuzzy)
+  if (sopFirst) {
+    const alias = sopAliasHits(qText).slice(0, 3);
+    if (alias.length) {
+      const payload = { text: `Top SOPs for: ${qText}`, blocks: formatSopBlocks(alias, qText) };
+      if (say) await say(payload); else await client.chat.postMessage({ channel, thread_ts, ...payload });
+      return;
+    }
+    const sHits = searchSOPs(qText, 3);
+    if (sHits.length) {
+      const payload = { text: `Top SOPs for: ${qText}`, blocks: formatSopBlocks(sHits, qText) };
       if (say) await say(payload); else await client.chat.postMessage({ channel, thread_ts, ...payload });
       return;
     }
   }
 
-  // FAQ search
+  // 2) FAQ
   if (FAQ_CACHE.length) {
-    const { type, query } = parseTypePrefix(raw);
+    const { type, query } = parseTypePrefix(qText);
     const fHits = searchFaqs(query, 3, type);
     if (fHits.length) {
       const payload = { text: `Top results for: ${query}`, blocks: formatFaqBlocks(fHits, query) };
@@ -292,20 +338,21 @@ async function handleQueryFlow({ rawText, client, channel, thread_ts, say }) {
     }
   }
 
-  // SOP fallback (when not strongly SOP-looking)
-  if (!preferSOP) {
-    const sHits = searchSOPs(raw, 3);
-    if (sHits.length) {
-      const payload = { text: `Top SOPs for: ${raw}`, blocks: formatSopBlocks(sHits, raw) };
+  // 3) SOP fallback (if user forced FAQ but none found)
+  if (!sopFirst) {
+    const sHits2 = searchSOPs(qText, 3);
+    if (sHits2.length) {
+      const payload = { text: `Top SOPs for: ${qText}`, blocks: formatSopBlocks(sHits2, qText) };
       if (say) await say(payload); else await client.chat.postMessage({ channel, thread_ts, ...payload });
       return;
     }
   }
 
-  // LLM fallback
-  const answer = await llmAnswer({ text: raw });
+  // 4) LLM fallback
+  const answer = await llmAnswer({ text: qText });
   if (say) await say(answer); else await client.chat.postMessage({ channel, thread_ts, text: answer });
 }
+
 
 // =========================
 // 6) Slack event handlers
