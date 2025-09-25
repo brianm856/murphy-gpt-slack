@@ -221,6 +221,18 @@ function formatSopBlocks(hits, query) {
       { type: 'divider' }
     );
   }
+
+function shouldPreferSOP(raw) {
+  const q = (raw || '').toLowerCase();
+  if (/^\s*sop:\s*/i.test(q)) return true;   // manual override via "sop: ..."
+  const SOP_KEYS = [
+    'listing to close','open house','circle calling','homelight','referral',
+    'zillow flex','onboarding','exp az','exp nj','buyer pending','30/60/90',
+    'success plan'
+  ];
+  return SOP_KEYS.some(k => q.includes(k));
+}
+
   return blocks;
 }
 
@@ -229,7 +241,7 @@ async function handleQueryFlow({ rawText, client, channel, thread_ts, say }) {
   const raw = (rawText || '').trim();
   if (!raw) return;
 
-  // manual refreshers
+  // maintenance commands
   if (/^(refresh|sync)\s+faq$/i.test(raw)) {
     await refreshFaqCache();
     const payload = { text: 'FAQ cache refreshed ✅' };
@@ -243,10 +255,22 @@ async function handleQueryFlow({ rawText, client, channel, thread_ts, say }) {
     return;
   }
 
-  // 1) FAQ
+  const preferSOP = shouldPreferSOP(raw);
+
+  // If it looks like an SOP query, try SOPs first
+  if (preferSOP) {
+    const sHitsFirst = searchSOPs(raw, 3);
+    if (sHitsFirst.length) {
+      const payload = { text: `Top SOPs for: ${raw}`, blocks: formatSopBlocks(sHitsFirst, raw) };
+      if (say) await say(payload); else await client.chat.postMessage({ channel, thread_ts, ...payload });
+      return;
+    }
+  }
+
+  // FAQ search
   if (FAQ_CACHE.length) {
     const { type, query } = parseTypePrefix(raw);
-    let fHits = searchFaqs(query, 3, type);
+    const fHits = searchFaqs(query, 3, type);
     if (fHits.length) {
       const payload = { text: `Top results for: ${query}`, blocks: formatFaqBlocks(fHits, query) };
       if (say) await say(payload); else await client.chat.postMessage({ channel, thread_ts, ...payload });
@@ -254,15 +278,17 @@ async function handleQueryFlow({ rawText, client, channel, thread_ts, say }) {
     }
   }
 
-  // 2) SOPs
-  const sHits = searchSOPs(raw, 3);
-  if (sHits.length) {
-    const payload = { text: `Top SOPs for: ${raw}`, blocks: formatSopBlocks(sHits, raw) };
-    if (say) await say(payload); else await client.chat.postMessage({ channel, thread_ts, ...payload });
-    return;
+  // SOP fallback (when not strongly SOP-looking)
+  if (!preferSOP) {
+    const sHits = searchSOPs(raw, 3);
+    if (sHits.length) {
+      const payload = { text: `Top SOPs for: ${raw}`, blocks: formatSopBlocks(sHits, raw) };
+      if (say) await say(payload); else await client.chat.postMessage({ channel, thread_ts, ...payload });
+      return;
+    }
   }
 
-  // 3) LLM fallback
+  // LLM fallback
   const answer = await llmAnswer({ text: raw });
   if (say) await say(answer); else await client.chat.postMessage({ channel, thread_ts, text: answer });
 }
