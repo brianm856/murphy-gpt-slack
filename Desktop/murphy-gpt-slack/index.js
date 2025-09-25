@@ -204,7 +204,8 @@ function formatFaqBlocks(hits, query) {
   }
   return blocks;
 }
-function formatSopBlocks(hits, query) {
+function 
+formatSopBlocks(hits, query) {
   const blocks = [];
   if (query) blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `Query: *${query}*` }] });
   for (const h of hits) {
@@ -221,6 +222,18 @@ function formatSopBlocks(hits, query) {
       { type: 'divider' }
     );
   }
+
+function shouldPreferSOP(raw) {
+  const q = (raw || '').toLowerCase();
+  if (/^\s*sop:\s*/i.test(q)) return true;   // manual override via "sop: ..."
+  const SOP_KEYS = [
+    'listing to close','open house','circle calling','homelight','referral',
+    'zillow flex','onboarding','exp az','exp nj','buyer pending','30/60/90',
+    'success plan'
+  ];
+  return SOP_KEYS.some(k => q.includes(k));
+}
+
 
 function shouldPreferSOP(raw) {
   const q = (raw || '').toLowerCase();
@@ -255,7 +268,8 @@ async function handleQueryFlow({ rawText, client, channel, thread_ts, say }) {
     return;
   }
 
-  const preferSOP = shouldPreferSOP(raw);
+  const preferSOP = (typeof shouldPreferSOP === 'function') && shouldPreferSOP(raw);
+
 
   // If it looks like an SOP query, try SOPs first
   if (preferSOP) {
