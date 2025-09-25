@@ -1,203 +1,258 @@
 // index.js
-require("dotenv").config();
-const { App, LogLevel } = require("@slack/bolt");
-const OpenAI = require("openai");
+// MurphyGPT Slack app (DMs + @mentions) with Google Sheets FAQ + OpenAI fallback
+// Folder expectations: .env, client_secret.json, token.json in project root
 
-// Verify env
-const missing = ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "OPENAI_API_KEY"].filter(k => !process.env[k]);
+require('dotenv').config({ path: './.env' });
+const fs = require('fs');
+const { App, LogLevel } = require('@slack/bolt');
+const { google } = require('googleapis');
+const OpenAI = require('openai');
+
+// =========================
+// 0) ENV & sanity checks
+// =========================
+const REQUIRED = ['SLACK_BOT_TOKEN', 'SLACK_APP_TOKEN', 'OPENAI_API_KEY'];
+const missing = REQUIRED.filter((k) => !process.env[k]);
 if (missing.length) {
-  console.error("❌ Missing env vars:", missing.join(", "));
+  console.error('❌ Missing env vars:', missing.join(', '));
+  console.error('Set them in your shell or a local env file you source before `node index.js`.');
   process.exit(1);
 }
 
-// Slack (Socket Mode)
+// Optional (but recommended) FAQ envs (won’t hard-fail if missing)
+if (!process.env.SHEET_ID || !process.env.SHEET_RANGE) {
+  console.warn('⚠️  SHEET_ID or SHEET_RANGE missing. FAQ will be disabled until you set them in .env');
+}
+
+// =========================
+// 1) Slack (Socket Mode)
+// =========================
 const app = new App({
-  token: process.env.SLACK_BOT_TOKEN,
-  appToken: process.env.SLACK_APP_TOKEN,
+  token: process.env.SLACK_BOT_TOKEN,      // xoxb-...
+  appToken: process.env.SLACK_APP_TOKEN,   // xapp-...
   socketMode: true,
   logLevel: LogLevel.INFO,
 });
 
-// OpenAI
+// =========================
+// 2) OpenAI (LLM fallback)
+// =========================
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// ================== MURPHYGPT SYSTEM PROMPT (ALL SOPs) ==================
-const SYSTEM = `You are MurphyGPT, the virtual assistant for The Murphy Group.
-Answer briefly, in a coaching tone, using ONLY the SOPs below unless the user asks for general info.
-When "how" is asked, give 3–6 bullet steps. If info is missing, say what's missing and ask for it.
-End every reply with: "The Murphy Group | www.mgsells.com".
-
-================= FOLLOW UP BOSS LEAD MANAGEMENT SOP =================
-🎯 Purpose
-Establish consistent daily/weekly practices in Follow Up Boss (FUB) that reflect Murphy Group standards for speed, service, and conversion. Move every lead from new contact to closed client with urgency.
-
-🚨 Critical Requirement
-- Use ONLY your FUB phone number and MG email for all communication (no personal phones/emails/apps).
-- Calls, texts, and voicemails must log via FUB automatically.
-- Install the FUB app and enable notifications.
-
-📂 Lead Stages & Definitions
-- Lead → New in FUB; not yet contacted.
-- Attempted Contact → At least 3 attempts (call/text/email); no connection yet.
-- Spoke with Customer → Contact made; notes must include timeline, motivation, and follow-up plan.
-- Appointment Set → Showing/consult/CMA scheduled; include date/time; add to calendar.
-- Met with Customer → Appointment occurred; update outcome + next step.
-- Showing Homes → Actively showing a buyer; follow up after every showing.
-- Listing Agreement → Seller signed; pre-list process begins.
-- Active Listing → Live on MLS; weekly updates + marketing notes required.
-- Submitting Offers → Offers written/submitted; log outcomes/negotiations.
-- Under Contract → Include key dates (closing, inspection, contingencies).
-- Nurture → Long-term; assign action plan + next follow-up.
-- Closed → Deal complete; tag "Closed"; final note for testimonial/referral.
-- Trash → Unqualified/out of market/unresponsive after multiple attempts; include reason note.
-
-🕒 Daily Expectations
-- Start of day: check New Leads (Lead), Overdue Tasks, hot opportunities (Showing, Listing Agreement, Submitting Offers).
-- Respond to NEW LEADS within 5 minutes.
-- Complete overdue tasks; work Smart Lists (Zillow, Buyer Active, Seller Active, etc.).
-
-☎️ First Contact Protocol
-- Call within 5 minutes → if no answer, text → followed by email if applicable.
-- Make at least 3 attempts on Day 1.
-- Update stage to Attempted Contact or Spoke with Customer and log results.
-
-📆 Weekly Workflow
-- Monday Pipeline Audit: review Spoke w/ Customer, Appointment Set, Showing, Listing Agreement, Submitting Offers → ensure clear notes, follow-up plan, correct stage/action plan → move stale to Nurture/Trash w/ notes.
-- Friday Follow-Up: touch all Active Buyers/Sellers; confirm weekend showings/open houses; log feedback + next steps.
-
-🧼 Lead Hygiene
-- No one should sit in "Lead" or "Spoke with Customer" longer than necessary.
-- Every lead must have: accurate stage, action plan, next task, and a note ≤ 7 days old (or timeline-appropriate).
-- Trash requires a reason note.
-
-💬 Notes & Comms
-- Log every call/text/meeting same day.
-- Notes include: date, summary, motivation/timeline, next step.
-- Use MG-branded templates; personalize every message.
-
-🏆 Accountability
-- Weekly review: speed to lead, conversations logged, pipeline movement, notes/task completion, overall conversion.
-- FUB is the source of truth—if it’s not in FUB, it didn’t happen.
-
-===================== LEAD CONVERSION SOP =====================
-Purpose: Maximize relationships, appointment setting, and long-term business through consistent execution.
-
-1) Lead Response Standards
-- Speed to Lead: contact within 5 minutes (non-negotiable).
-- Attempts: call 7 times in the first 7 days; "no answer" ≠ disinterest.
-- Business Comms: use FUB number + MG email only.
-
-2) Video Communication
-- Send a personalized video to every new lead (BombBomb, Loom, or FUB video).
-- Purpose: reduce skepticism, build trust, humanize.
-
-3) Follow-Up Protocol
-- Contacted Leads: follow up 2×/month indefinitely.
-- Past Clients: contact 1×/month indefinitely; remain top-of-mind for referrals.
-
-4) Prospecting & Time Blocking
-- Daily: 1 hr Prospecting (new outreach) + 1 hr Follow-Up (nurtures, past clients, pipeline).
-- Treat these as immovable calendar appointments.
-
-5) Accountability & Metrics (tracked in FUB)
-- Speed to Lead (≤ 5 min), 7 calls/7 days, video sent (Y/N), 2×/month cadence, 1×/month past clients, daily time blocks.
-- Agents own consistency; reviewed weekly in 1:1s and sales meetings.
-
-6) Lead Conversion Honor Code (commit to…)
-- Never let a lead wait > 5 minutes; call 7×/7 days; send video to every lead;
-- Follow up 2×/month (contacted leads); past clients 1×/month;
-- Time block 2 hrs daily; use only FUB number + MG email.
-
-================== LEAD MANAGEMENT PROCESS (STRUCTURE) ==================
-Overview
-- Lead management is a systematic way to follow up with contacts/clients after initial contact.
-- Most sources (e.g., Ylopo) flow into FUB and are categorized/staged as they move through the pipeline.
-⚠️ Biggest mistake: incorrect stage assignment. A buyer/seller must be emotionally, personally, and financially ready with achievable criteria before moving to certain stages.
-
-Follow-Up Rhythm
-- Dedicate ≥ 1 hour/day to focused lead follow-up.
-
-Lead Stages & When to Use Them (operational detail)
-1. Lead — new in FUB; immediate response required (Speed to Lead ≤ 5 min).
-2. Attempted Contact — attempted; needs ≥ 3 outreach attempts (call/text/email).
-3. Spoke with Customer — contact made; add timeline, motivation, follow-up plan.
-4. Appointment Set — add date/time/details; put on calendar.
-5. Met with Customer — add outcome + next steps.
-6. Showing Homes — follow up after every showing.
-7. Listing Agreement — signed; begin pre-list (marketing prep, photography, etc.).
-8. Active Listing — live on MLS; weekly updates + marketing notes.
-9. Submitting Offers — track outcomes/negotiations.
-10. Under Contract — include key dates (closing, inspection, contingencies).
-11. Nurture — not ready now; set next follow-up + assign action plan.
-12. Closed — tag "Closed"; final note for testimonial/referral.
-13. Trash — unqualified/out of market/unresponsive; include reason note.
-
-Tags to Apply in FUB
-- Buyer; Seller; Buyer/Seller (Dual); Past Client; Investor; Sphere; Lead Source (e.g., Ylopo, Zillow Flex, HomeLight, Referral)
-
-Contact Frequency Guide
-- Active stages (Showing, Submitting Offers, Under Contract, Active Listing): Daily–Weekly
-- Spoke w/ Customer / Appointment Set / Met w/ Customer: Weekly+
-- Nurture: 2×/month minimum + alerts/newsletters
-- Past Clients / Sphere: 1×/month minimum + Top 50 referral touches
-- Attempted Contact: Daily until contact per cadence
-- Lead: within 5 minutes of assignment
-
-==============================================================
-Format every answer:
-1) Direct answer (1–2 lines)
-2) 3–6 bullets of steps
-3) End: "The Murphy Group | www.mgsells.com"
+async function llmAnswer({ text, userContext }) {
+  const system = `
+You are MurphyGPT, an assistant for The Murphy Group real estate team.
+- Be concise, professional, and friendly.
+- Prioritize Murphy Group SOPs and best practices (NJ & AZ specifics when relevant).
+- If you don't have a confident answer, say what you CAN do or what info you need.
+- Never share private data; never invent links.
 `;
 
-// --------------- OpenAI call ---------------
-async function askOpenAI(text) {
+  const messages = [
+    { role: 'system', content: system.trim() },
+    ...(userContext ? [{ role: 'user', content: userContext }] : []),
+    { role: 'user', content: text || '' },
+  ];
+
   try {
-    const resp = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: text || "Help" },
-      ],
-      temperature: 0.2
+    const resp = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages,
+      temperature: 0.3,
     });
-    return resp.output_text || "(No text output)";
-  } catch (e) {
-    console.error("❌ OpenAI error:", e.message);
-    return "I hit an issue reaching OpenAI. The Murphy Group | www.mgsells.com";
+    const answer = resp.choices?.[0]?.message?.content?.trim();
+    return answer || "I couldn't come up with a confident answer.";
+  } catch (err) {
+    console.error('OpenAI error:', err?.response?.data || err);
+    return "I'm having trouble reaching the assistant right now.";
   }
 }
 
-// --------------- Slack handlers ---------------
-app.event("app_mention", async ({ event, say }) => {
+// =========================
+// 3) Google Sheets FAQ (OAuth desktop creds)
+// =========================
+let FAQ_CACHE = [];
+let FAQ_CACHE_AT = 0;
+
+function hasFaqConfig() {
+  return !!(process.env.SHEET_ID && process.env.SHEET_RANGE && fs.existsSync('./client_secret.json') && fs.existsSync('./token.json'));
+}
+
+function getOAuth2Client() {
+  const creds = JSON.parse(fs.readFileSync('./client_secret.json', 'utf8'));
+  const cfg = creds.installed || creds.web;
+  const oAuth2Client = new google.auth.OAuth2(cfg.client_id, cfg.client_secret, cfg.redirect_uris[0]);
+
+  if (!fs.existsSync('./token.json')) {
+    throw new Error('token.json not found. Run `node test-oauth.js` once to generate it.');
+  }
+  oAuth2Client.setCredentials(JSON.parse(fs.readFileSync('./token.json', 'utf8')));
+  return oAuth2Client;
+}
+
+function getSheets() {
+  const auth = getOAuth2Client();
+  return google.sheets({ version: 'v4', auth });
+}
+
+async function fetchFaqRows() {
+  if (!hasFaqConfig()) return [];
+  const sheets = getSheets();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: process.env.SHEET_ID,
+    range: process.env.SHEET_RANGE, // FAQ!A2:C  (A=Type, B=Question, C=Answer)
+    valueRenderOption: 'UNFORMATTED_VALUE',
+  });
+  const rows = res.data.values ?? [];
+  return rows
+    .filter((r) => (r[1] ?? '').toString().trim() && (r[2] ?? '').toString().trim())
+    .map((r, i) => ({
+      id: `faq-${i + 1}`,
+      type: String(r[0] ?? ''),   // A (Type)
+      question: String(r[1]),     // B (Question)
+      answer: String(r[2]),       // C (Answer)
+    }));
+}
+
+async function refreshFaqCache() {
   try {
-    const q = (event.text || "").replace(/<@[^>]+>/g, "").trim();
-    const a = await askOpenAI(q);
-    await say({ thread_ts: event.ts, text: a });
-  } catch (err) {
-    console.error("app_mention error:", err);
+    const rows = await fetchFaqRows();
+    FAQ_CACHE = rows;
+    FAQ_CACHE_AT = Date.now();
+    console.log(`✅ FAQ loaded: ${FAQ_CACHE.length} item(s) @ ${new Date(FAQ_CACHE_AT).toLocaleString()}`);
+  } catch (e) {
+    console.warn('⚠️  FAQ refresh failed:', e.message || e);
+  }
+}
+
+function searchFaqs(query, limit = 3, wantedType = null) {
+  const q = (query || '').toLowerCase();
+  const terms = q.split(/\s+/).filter(Boolean);
+  return FAQ_CACHE
+    .map((item) => {
+      const hay = `${item.type} ${item.question} ${item.answer}`.toLowerCase();
+      let score = 0;
+      if (hay.includes(q)) score += 10; // exact phrase boost
+      for (const t of terms) if (hay.includes(t)) score += 1;
+      return { item, score };
+    })
+    .filter((x) => x.score > 0)
+    .map(({ item, score }) => ({ ...item, _score: score }))
+    .filter((it) => !wantedType || (it.type || '').toLowerCase() === wantedType)
+    .sort((a, b) => b._score - a._score)
+    .slice(0, limit)
+    .map(({ _score, ...rest }) => rest);
+}
+
+// =========================
+/* 4) Helper utils */
+// =========================
+function parseTypePrefix(text) {
+  const m = (text || '').match(/^\s*(buyer|seller|investor|agent|general):\s*(.*)$/i);
+  return m ? { type: m[1].toLowerCase(), query: m[2] } : { type: null, query: text };
+}
+
+function formatFaqBlocks(hits, query) {
+  const blocks = [];
+  if (query) {
+    blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `Query: *${query}*` }] });
+  }
+  for (const h of hits) {
+    const ans = h.answer.length > 1800 ? h.answer.slice(0, 1800) + '…' : h.answer;
+    blocks.push(
+      { type: 'section', text: { type: 'mrkdwn', text: `*Q:* ${h.question}\n*A:* ${ans}` } },
+      { type: 'context', elements: [{ type: 'mrkdwn', text: h.type ? `Type: ${h.type}` : ' ' }] },
+      { type: 'divider' }
+    );
+  }
+  return blocks;
+}
+
+// Try FAQ first; if handled, return true. Else false so the normal flow runs.
+async function maybeAnswerFromFAQ({ rawText, client, channel, thread_ts, say }) {
+  const raw = (rawText || '').trim();
+  if (!raw) return false;
+
+  // manual refresh by plain message
+  if (/^(refresh|sync)\s+faq$/i.test(raw)) {
+    await refreshFaqCache();
+    const payload = { text: 'FAQ cache refreshed ✅' };
+    if (say) await say(payload);
+    else await client.chat.postMessage({ channel, thread_ts, ...payload });
+    return true;
+  }
+
+  if (!FAQ_CACHE.length) return false; // cache empty or FAQ disabled
+
+  const { type, query } = parseTypePrefix(raw);
+  let hits = searchFaqs(query, 3, type);
+  if (!hits.length) return false;
+
+  const payload = { text: `Top results for: ${query}`, blocks: formatFaqBlocks(hits, query) };
+  if (say) await say(payload);
+  else await client.chat.postMessage({ channel, thread_ts, ...payload });
+  return true;
+}
+
+// =========================
+/* 5) Event handlers */
+// =========================
+
+// @mentions in channels
+app.event('app_mention', async ({ event, client }) => {
+  try {
+    const raw = (event.text || '').replace(/<@[^>]+>/, '').trim();
+
+    // 1) FAQ pass
+    const handled = await maybeAnswerFromFAQ({
+      rawText: raw,
+      client,
+      channel: event.channel,
+      thread_ts: event.ts,
+    });
+    if (handled) return;
+
+    // 2) LLM fallback
+    const answer = await llmAnswer({ text: raw });
+    await client.chat.postMessage({
+      channel: event.channel,
+      thread_ts: event.ts,
+      text: answer,
+    });
+  } catch (e) {
+    console.error('app_mention error:', e);
   }
 });
 
+// DMs to the bot
 app.message(async ({ message, say }) => {
   try {
-    if (message?.channel_type === "im" && !message.bot_id) {
-      const a = await askOpenAI(message.text || "Help");
-      await say(a);
-    }
-  } catch (err) {
-    console.error("dm error:", err);
+    if (!message || message.subtype || message.bot_id) return;
+    if (message.channel_type !== 'im') return;
+
+    const raw = message.text || '';
+
+    // 1) FAQ pass
+    const handled = await maybeAnswerFromFAQ({ rawText: raw, say });
+    if (handled) return;
+
+    // 2) LLM fallback
+    const answer = await llmAnswer({ text: raw });
+    await say(answer);
+  } catch (e) {
+    console.error('message handler error:', e);
   }
 });
 
-// --------------- Start ---------------
+// =========================
+/* 6) Boot */
+// =========================
 (async () => {
-  try {
-    await app.start(process.env.PORT || 3000);
-    console.log("✅ MurphyGPT is running via Socket Mode with SOPs embedded");
-  } catch (e) {
-    console.error("❌ Bolt failed to start:", e);
-    process.exit(1);
-  }
-})();
+  // Warm FAQ cache (non-fatal if FAQ not configured)
+  await refreshFaqCache();
+  // Keep it fresh every 5 minutes
+  setInterval(() => refreshFaqCache().catch(console.error), 5 * 60 * 1000);
 
+  await app.start(process.env.PORT || 3000);
+  console.log('🚀 MurphyGPT is running (DMs + @mentions). FAQ ready:', FAQ_CACHE.length, 'items');
+})();

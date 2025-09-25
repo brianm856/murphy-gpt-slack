@@ -1,0 +1,82 @@
+[
+  {
+    "id": "buyer-pending",
+    "title": "Buyer Pending SOP",
+    "summary": "From signed buyer-broker agreement to inspections and closing.",
+    "tags": ["buyer","transactions","NJ","AZ"],
+    "url": "#",
+    "content": "Step 1: Send Exclusive Buyer-Broker Representation Agreement (include $495 fee). Step 2: Upload to CRM — NJ: Agency, Proposal to Purchase, Pre-Approval/POF; AZ: Agency, Pre-Approval/POF. Step 3: Submit New Pending form (NJ/AZ) to trigger contract creation; admin drafts contracts/broker docs. Step 4: Admin sends for signatures; upon execution admin sends to listing agent with next steps. Step 5: Inspections & negotiations — schedule, review, request repairs/credits; AZ: have admin draft BINSR and send by deadline. Step 6: Closing prep — admin obtains commission check copies and uploads all closing docs to compliance portal."
+  },
+  {
+    "id": "circle-calling",
+    "title": "Circle Calling SOP",
+    "summary": "Standard process for requesting, calling, and cleaning up circle-prospect lists.",
+    "tags": ["prospecting","circle-calling","agent","admin"],
+    "url": "#",
+    "content": "Agent sends property address to admin to generate circle list. Admin uploads list to CRM and notifies agent. Agent calls, logs notes/dispositions, and sets follow-ups. After two weeks admin deletes/archives list unless agent requests extension."
+  },
+  {
+    "id": "homelight-lead",
+    "title": "HomeLight Lead SOP",
+    "summary": "Immediate response, strict follow-up, logging, and appointment requirement to protect score.",
+    "tags": ["leads","HomeLight","follow-up","conversion"],
+    "url": "#",
+    "content": "Call immediately; then call twice per day for 10 days until contact is made (do not decline leads). Connection unlocks contact info and requires logging a date/time appointment to count. If no appointment, nurture monthly. Keep both Follow Up Boss and HomeLight dashboard updated. HomeLight tracks referrals sent/accepted, connection on first call, appointments set."
+  },
+  {
+    "id": "listing-to-close",
+    "title": "Listing to Close SOP",
+    "summary": "Pre-listing to closing, including MLS, signage, showings, offers, under contract steps by state.",
+    "tags": ["listing","transactions","NJ","AZ"],
+    "url": "#",
+    "content": "Pre-Listing: complete New Listing Paperwork; sign in person or via e-sign. Within 48 hours: complete MLS Listing Input online form (NJ/AZ). Listing: admin inputs to MLS and uploads photos; place Coming Soon sign and lockbox (NJ lockbox code 0612) and notify admin. Date Listed: place For Sale rider; coordinate open house; showings via ShowingTime (NJ) or Aligned Showings (AZ); copy admin on offers (NJ: admin@mgsells.com, AZ: admin@mgsellsarizona.com). Under Contract: NJ—send Proposal to Purchase + Pre-Approval/POF; admin prepares contracts/addenda for buyer-side signatures; place Under Contract rider. AZ—send contract + POF; admin sends to seller for signatures; place Under Contract rider. Closing Prep: remove signs/lockbox; admin requests commission check copies and uploads closing docs to compliance."
+  },
+  {
+    "id": "open-house",
+    "title": "Open House SOP (Prep Checklist)",
+    "summary": "Approval, marketing, scripts, circle prospecting, signage, day-of setup, follow-up, and materials.",
+    "tags": ["open-house","marketing","showings"],
+    "url": "#",
+    "content": "Ensure listing agent/seller approval. Three days before: notify Dal; post on social with IDX link. Week-of: practice circle, door-knocking, and hosting scripts. Day before: call 100+ homes via dialer; prepare 5+ signs and map; mind sign-placement laws; schedule in ShowingTime (NJ) or Aligned Showings (AZ). Day-of: door-knock 10 homes; arrive early; place signs; set table (flyers, sign-in, water/snacks); lights/HVAC; learn key features. After: secure property; remove signs/materials; send feedback via ShowingTime/Aligned; same-day lead follow-up; update all leads in FUB with proper status. Materials: signs, balloons, QR flyer (Brivity), iPad/laptop, paper backup, water/snacks, comps, HOT properties list."
+  },
+  {
+    "id": "referral",
+    "title": "Referral SOP",
+    "summary": "Capture terms, register, engage quickly, milestone updates, and payout at closing.",
+    "tags": ["referrals","agent","admin"],
+    "url": "#",
+    "content": "Receive referral details (referring agent info, fee % — 25% unless otherwise approved, client info, type). Register via Referral Intake Form and notify admin. Engage client within 24 hours; start buyer/seller onboarding. Track in CRM and update referring agent at milestones (first contact, signed/accepted, closing scheduled). At closing, ensure referral fee in disbursement and send confirmation/thank-you."
+  },
+  {
+    "id": "zillow-flex-call",
+    "title": "Zillow Flex Connection Call Guide",
+    "summary": "Make a great first impression, book showings, handle objections, avoid bad news early, close strong, and prompt the Zillow survey.",
+    "tags": ["Zillow Flex","scripts","objections","leads"],
+    "url": "#",
+    "content": "Opening: clear intro and go for the showing time. Objections: listing agent—explain representation; already working with agent—qualify the relationship and expectations; quick question—offer to tour and follow up; pending—consider backup offers; remote—video tour; long timeline—nurture with strategy; single home interest—offer similar options. Close: confirm contact info and preferences. Zillow survey: aim for 'Yes' (locks for 12 months); 'Maybe' gives 6 months; 'No' removes relationship. Avoid: pulling MLS data live, financing questions on first call, early bad news, forgetting seller lead-in."
+  },
+  {
+    "id": "exp-az-onboarding",
+    "title": "eXp AZ Onboarding SOP",
+    "summary": "Apply, sign ICA, transfer license via ADRE, gain system access, orientation, compliance, branding, and launch.",
+    "tags": ["onboarding","eXp","AZ"],
+    "url": "#",
+    "content": "Confirm readiness. Apply at join.exprealty.com and select sponsor. Sign ICA. Transfer license in ADRE portal (Hire by new brokerage: eXp Realty – Arizona LC634213000; pay fee). Gain access to Enterprise, Skyslope, Workplace, kvCORE, eXp University, eXp World. Attend orientation within ~72 hours. Complete Skyslope onboarding/compliance; ensure ADRE-compliant marketing. Update social/profiles/signature. Launch lead gen and training cadence."
+  },
+  {
+    "id": "exp-nj-onboarding",
+    "title": "eXp NJ Onboarding SOP",
+    "summary": "Apply, sign ICA, license release/pick-up by broker team, system access, orientation, and NJ compliance.",
+    "tags": ["onboarding","eXp","NJ"],
+    "url": "#",
+    "content": "Apply at join.exprealty.com and select sponsor. Sign ICA. Ask current broker to release license; notify NJ broker team (nj.broker@exprealty.net) for pick-up. Gain access to Enterprise, Skyslope, Workplace, kvCORE, eXp University, eXp World. Attend orientation and NJ state meetings. Upload all offers/contracts to Skyslope per NJREC. Update marketing/profiles/signature. Launch lead gen."
+  },
+  {
+    "id": "30-60-90",
+    "title": "Murphy Group 30/60/90 Day Agent Success Plan",
+    "summary": "12-week ramp with weekly actions and KPIs: Foundation → Execution → Conversion.",
+    "tags": ["training","success-plan","onboarding"],
+    "url": "#",
+    "content": "Days 1–30 (Foundation): systems/tech, culture/values, scripts, CRM mastery, shadowing, mock offers. Days 31–60 (Execution): daily lead actions, first open house/consults, listing marketing, first pending with TC support. Days 61–90 (Conversion): book showings, write offers with minimal oversight, review pipeline/metrics, contribute to meetings, brand content. Success metrics: daily actions 5→10+, appts 1→6+, offers 0–1→3+, closings 0→2+, CRM compliance 90→100%, meeting attendance 100%."
+  }
+]
