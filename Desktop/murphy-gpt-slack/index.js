@@ -73,21 +73,53 @@ function hasFaqConfig() {
   const hasEnv = !!(process.env.GOOGLE_CLIENT_JSON && process.env.GOOGLE_TOKEN_JSON);
   return hasSheet && (hasFiles || hasEnv);
 }
+async function getOAuth() {
+  // Load Google client (from env in Render, or local file)
+  let creds;
+  try {
+    if (process.env.GOOGLE_CLIENT_JSON) {
+      creds = JSON.parse(process.env.GOOGLE_CLIENT_JSON);
+    } else if (fs.existsSync('client_secret.json')) {
+      creds = JSON.parse(fs.readFileSync('client_secret.json', 'utf8'));
+    } else {
+      throw new Error('Missing Google client JSON. Set GOOGLE_CLIENT_JSON or include client_secret.json');
+    }
+  } catch (e) {
+    console.error('Invalid GOOGLE_CLIENT_JSON / client_secret.json:', e.message || e);
+    throw e;
+  }
 
-function getOAuth2Client() {
-  // Prefer env vars in production (Render); fall back to local files for dev
-  const clientJson = process.env.GOOGLE_CLIENT_JSON
-    ? JSON.parse(process.env.GOOGLE_CLIENT_JSON)
-    : JSON.parse(fs.readFileSync('./client_secret.json', 'utf8'));
+  const cfg = creds.installed || creds.web;
+  if (!cfg || !cfg.client_id || !cfg.client_secret) {
+    throw new Error('Google client JSON must include .installed or .web with client_id and client_secret');
+  }
 
-  const token = process.env.GOOGLE_TOKEN_JSON
-    ? JSON.parse(process.env.GOOGLE_TOKEN_JSON)
-    : JSON.parse(fs.readFileSync('./token.json', 'utf8'));
+  const oAuth2Client = new google.auth.OAuth2(
+    cfg.client_id,
+    cfg.client_secret,
+    (cfg.redirect_uris && cfg.redirect_uris[0]) || 'http://localhost'
+  );
 
-  const cfg = clientJson.installed || clientJson.web;
-  const oAuth2Client = new google.auth.OAuth2(cfg.client_id, cfg.client_secret, cfg.redirect_uris[0]);
+  // Load token (from env in Render, or local file)
+  let token;
+  try {
+    if (process.env.GOOGLE_TOKEN_JSON) {
+      token = JSON.parse(process.env.GOOGLE_TOKEN_JSON);
+    } else if (fs.existsSync('token.json')) {
+      token = JSON.parse(fs.readFileSync('token.json', 'utf8'));
+    } else {
+      throw new Error('Missing Google token. Set GOOGLE_TOKEN_JSON or include token.json');
+    }
+  } catch (e) {
+    console.error('Invalid GOOGLE_TOKEN_JSON / token.json:', e.message || e);
+    throw e;
+  }
+
   oAuth2Client.setCredentials(token);
   return oAuth2Client;
+}
+
+
 }
 function getSheets() {
   const auth = getOAuth2Client();
